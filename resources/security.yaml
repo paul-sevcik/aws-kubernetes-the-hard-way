@@ -1,0 +1,21 @@
+KubeSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+        GroupDescription: Instance security
+        VpcId:
+            Ref: KubeVPC
+        SecurityGroupEgress:
+          - FromPort: 0
+            ToPort: 0
+            IpProtocol: '-1'
+            CidrIp: 0.0.0.0/0
+        SecurityGroupIngress:
+          - FromPort: 22
+            ToPort: 22
+            IpProtocol: tcp
+            CidrIp:
+             Fn::Join:
+              - /
+              -
+                - Ref: MyIP
+                - 32

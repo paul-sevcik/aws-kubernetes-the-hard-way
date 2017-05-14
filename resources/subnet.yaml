@@ -1,0 +1,16 @@
+# subnet in each AZ
+KubePublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+        AvailabilityZone: us-west-2a
+        CidrBlock: 10.43.0.0/16
+        VpcId:
+            Ref: KubeVPC
+
+KubeRoutingAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+        RouteTableId:
+            Ref: KubeRouteTable
+        SubnetId:
+            Ref: KubePublicSubnet1

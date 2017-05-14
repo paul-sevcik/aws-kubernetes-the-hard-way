@@ -1,0 +1,12 @@
+InstanceType:
+    Description: Only t2.micro, since it is in the free tier.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+InstanceKeyPair:
+    Description: Amazon EC2 Key Pair
+    Type: AWS::EC2::KeyPair::KeyName
+MyIP:
+    Description: public ip address of laptop
+    Type: String

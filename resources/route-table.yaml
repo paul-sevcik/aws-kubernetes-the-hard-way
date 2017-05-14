@@ -1,0 +1,16 @@
+# route to internet
+KubeRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+        VpcId:
+            Ref: KubeVPC
+
+KubeRoute:
+    Type: AWS::EC2::Route
+    DependsOn: KubeIGAttachment
+    Properties:
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId:
+            Ref: KubeIG
+        RouteTableId:
+            Ref: KubeRouteTable

@@ -1,0 +1,10 @@
+# used to allow access to internet from subnet in VPC
+KubeIG:
+    Type: AWS::EC2::InternetGateway
+KubeIGAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+        InternetGatewayId:
+            Ref: KubeIG
+        VpcId:
+            Ref: KubeVPC
