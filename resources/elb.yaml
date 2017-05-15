@@ -1,0 +1,22 @@
+KubeApiELB:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+        Instances:
+          - Ref: controller1
+          - Ref: controller2
+          - Ref: controller3
+        Subnets:
+          - Ref: KubePublicSubnet1
+        SecurityGroups:
+          - Ref: KubeApiSG
+        Listeners:
+          - Protocol: TCP
+            LoadBalancerPort: '6443'
+            InstanceProtocol: TCP
+            InstancePort: '6443'
+        HealthCheck:
+            HealthyThreshold: 2
+            UnhealthyThreshold: 2
+            Timeout: 15
+            Target: HTTP:8080/healthz
+            Interval: 30

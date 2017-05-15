@@ -7,27 +7,52 @@ import argparse
 import boto3
 import yaml
 
+ETCD_INSTANCES = 3
+CONTROLLER_INSTANCES = 3
+WORKER_INSTANCES = 3
+
 
 def build_template():
 
     # break the template into separate files to make it easier to understand
-    template_files = [
+    resource_templates = [
         'resources/vpc.yaml',
         'resources/internet-gateway.yaml',
         'resources/route-table.yaml',
         'resources/subnet.yaml',
-
         'resources/security.yaml',
-        'resources/etcd.yaml',
+        'resources/elb.yaml',
     ]
+
+    instances = {
+        'resources/etcd.yaml': [
+            {'name': 'etcd{0}'.format(num), 'privateip': '10.43.0.{0}'.format(num+10)}
+            for num in range(1, ETCD_INSTANCES+1)
+        ],
+        'resources/controller.yaml': [
+            {'name': 'controller{0}'.format(num), 'privateip': '10.43.0.{0}'.format(num + 20)}
+            for num in range(1, CONTROLLER_INSTANCES + 1)
+        ],
+        'resources/worker.yaml': [
+            {'name': 'worker{0}'.format(num), 'privateip': '10.43.0.{0}'.format(num + 30)}
+            for num in range(1, WORKER_INSTANCES + 1)
+        ],
+    }
 
     # combine files into final template
     resources = {}
-    for template_filename in template_files:
+    for template_filename in resource_templates:
         with open(template_filename) as template_file:
             template = yaml.load(template_file)
             for key, value in template.items():
                 resources[key] = value
+    for template_filename in instances:
+        for format_params in instances[template_filename]:
+            with open(template_filename) as template_file:
+                template = yaml.load(template_file.read().format(**format_params))
+                for key, value in template.items():
+                    resources[key] = value
+
     parameters = yaml.load(open('parameters.yaml'))
     vpc_template = {
         'Description': 'private VPC for kubernetes cluster',
@@ -82,7 +107,7 @@ def create(cloudformation, stackname):
 
 
 def update(cloudformation, stackname):
-    print('creating the stack')
+    print('updating the stack')
     apply_template(cloudformation, stackname, create_stack=False)
     print('stack update complete')
 
@@ -102,13 +127,10 @@ if __name__ == '__main__':
     parser.add_argument('cmd', help='command to run, either create or delete')
     args = parser.parse_args()
 
-    if args.cmd not in ['create', 'delete']:
+    if args.cmd not in ['create', 'delete', 'update']:
         import sys
         parser.print_help()
         sys.exit(1)
 
-    command_func = {
-        'create': create,
-        'delete': delete,
-    }
-    command_func[args.cmd](boto3.client('cloudformation'), 'Kubernetes-in-AWS')
+    command_func = locals()[args.cmd]
+    command_func(boto3.client('cloudformation'), 'Kubernetes-in-AWS')
