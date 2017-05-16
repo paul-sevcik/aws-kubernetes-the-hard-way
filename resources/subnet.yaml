@@ -3,7 +3,7 @@ KubePublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
         AvailabilityZone: us-west-2a
-        CidrBlock: 10.43.0.0/16
+        CidrBlock: 10.240.0.0/24
         VpcId:
             Ref: KubeVPC
 

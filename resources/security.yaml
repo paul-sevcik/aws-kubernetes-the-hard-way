@@ -37,22 +37,41 @@ KubeSG:
             IpProtocol: tcp
             SourceSecurityGroupId:
               Ref: KubeApiSG
-          - FromPort: 0
-            ToPort: 0
-            IpProtocol: '-1'
+          - FromPort: 22
+            ToPort: 22
+            IpProtocol: tcp
             CidrIp:
              Fn::Join:
               - /
               -
                 - Ref: MyIP
                 - 32
+          - FromPort: 6443
+            ToPort: 6443
+            IpProtocol: tcp
+            CidrIp:
+             Fn::Join:
+              - /
+              -
+                - Ref: MyIP
+                - 32
+          - FromPort: 0
+            ToPort: 0
+            IpProtocol: icmp
+            CidrIp:
+             Fn::Join:
+              - /
+              -
+                - Ref: MyIP
+                - 32
+
 KubeSelfSGIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
         GroupId:
             Ref: KubeSG
-        IpProtocol: tcp
-        FromPort: 22
-        ToPort: 22
+        IpProtocol: '-1'
+        FromPort: 0
+        ToPort: 0
         SourceSecurityGroupId:
             Ref: KubeSG

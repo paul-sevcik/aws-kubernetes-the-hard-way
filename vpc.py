@@ -7,7 +7,6 @@ import argparse
 import boto3
 import yaml
 
-ETCD_INSTANCES = 3
 CONTROLLER_INSTANCES = 3
 WORKER_INSTANCES = 3
 
@@ -25,17 +24,13 @@ def build_template():
     ]
 
     instances = {
-        'resources/etcd.yaml': [
-            {'name': 'etcd{0}'.format(num), 'privateip': '10.43.0.{0}'.format(num+10)}
-            for num in range(1, ETCD_INSTANCES+1)
-        ],
         'resources/controller.yaml': [
-            {'name': 'controller{0}'.format(num), 'privateip': '10.43.0.{0}'.format(num + 20)}
-            for num in range(1, CONTROLLER_INSTANCES + 1)
+            {'name': 'controller{0}'.format(num), 'privateip': '10.240.0.{0}'.format(10 + num)}
+            for num in range(CONTROLLER_INSTANCES)
         ],
         'resources/worker.yaml': [
-            {'name': 'worker{0}'.format(num), 'privateip': '10.43.0.{0}'.format(num + 30)}
-            for num in range(1, WORKER_INSTANCES + 1)
+            {'name': 'worker{0}'.format(num), 'privateip': '10.240.0.{0}'.format(20 + num)}
+            for num in range(WORKER_INSTANCES)
         ],
     }
 

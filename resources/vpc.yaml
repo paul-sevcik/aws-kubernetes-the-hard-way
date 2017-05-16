@@ -2,5 +2,5 @@
 KubeVPC:
     Type: AWS::EC2::VPC
     Properties:
-        CidrBlock: 10.43.0.0/16
+        CidrBlock: 10.240.0.0/16
         EnableDnsHostnames: 'true'

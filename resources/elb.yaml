@@ -2,9 +2,9 @@ KubeApiELB:
     Type: AWS::ElasticLoadBalancing::LoadBalancer
     Properties:
         Instances:
+          - Ref: controller0
           - Ref: controller1
           - Ref: controller2
-          - Ref: controller3
         Subnets:
           - Ref: KubePublicSubnet1
         SecurityGroups:
