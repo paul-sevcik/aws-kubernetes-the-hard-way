@@ -1,6 +1,6 @@
 
 from datetime import datetime
-import os.path
+from tempfile import NamedTemporaryFile
 
 import boto3
 import botocore.exceptions
@@ -33,9 +33,17 @@ def make_bucket():
     assert isinstance(bucket.creation_date, datetime)
 
 
-def upload(filename):
+def delete_bucket():
+    bucket.objects.delete()
+    bucket.delete()
+
+
+def upload(content, filename):
     make_bucket()
-    bucket.upload_file(filename, os.path.basename(filename))
+
+    with NamedTemporaryFile(mode='w') as file:
+        file.write(content)
+        bucket.upload_file(file.name, filename)
 
     #TODO: verify upload
 

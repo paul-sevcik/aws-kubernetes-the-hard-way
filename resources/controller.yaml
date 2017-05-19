@@ -16,3 +16,4 @@
         AvailabilityZone: us-west-2a
         KeyName:
             Ref: InstanceKeyPair
+        UserData: {userdata}

@@ -3,12 +3,53 @@ Use Cloudformation to create all VPC elements, including InternetGateway,
 RouteTable, and Subnet.
 """
 import argparse
+from functools import reduce
+import base64
 
 import boto3
 import yaml
 
+import s3
+
 CONTROLLER_INSTANCES = 3
 WORKER_INSTANCES = 3
+
+
+def encode_base64(content):
+    """
+    Encode contents of a file as base64 string.
+    """
+
+    # convert to bytes
+    unencoded = bytes(content, 'utf-8')
+
+    # encode as base 64
+    encoded = base64.b64encode(unencoded)
+
+    # convert back to string
+    data = encoded.decode()
+
+    return data
+
+
+def get_cert(certfile):
+    """
+    Encode contents of cert file as base 64.
+    """
+    with open(certfile) as f:
+        unencoded = f.read()
+        data = encode_base64(unencoded)
+    return data
+
+
+def get_userdata(**format_params):
+    """
+    Get user-data, format according to format_args, then encode it as base 64.
+    """
+    with open(format_params['userdata_template']) as f:
+        unencoded = f.read().format(**format_params)
+        data = encode_base64(unencoded)
+    return data
 
 
 def build_template():
@@ -23,13 +64,32 @@ def build_template():
         'resources/elb.yaml',
     ]
 
+    certs = {
+        'ca_pem': get_cert('ca/ca.pem'),
+        'ca_key_pem': get_cert('ca/ca-key.pem'),
+        'kube_proxy_pem': get_cert('ca/kube-proxy.pem'),
+        'kube_proxy_key_pem': get_cert('ca/kube-proxy-key.pem'),
+        'kubernetes_pem': get_cert('ca/kubernetes.pem'),
+        'kubernetes_key_pem': get_cert('ca/kubernetes-key.pem'),
+    }
+
     instances = {
         'resources/controller.yaml': [
-            {'name': 'controller{0}'.format(num), 'privateip': '10.240.0.{0}'.format(10 + num)}
+            {
+                'name': 'controller{0}'.format(num),
+                'privateip': '10.240.0.{0}'.format(10 + num),
+                'userdata_template': 'controller-cloud-init.yaml',
+                **certs,
+            }
             for num in range(CONTROLLER_INSTANCES)
         ],
         'resources/worker.yaml': [
-            {'name': 'worker{0}'.format(num), 'privateip': '10.240.0.{0}'.format(20 + num)}
+            {
+                'name': 'worker{0}'.format(num),
+                'privateip': '10.240.0.{0}'.format(20 + num),
+                'userdata_template': 'worker-cloud-init.yaml',
+                **certs,
+            }
             for num in range(WORKER_INSTANCES)
         ],
     }
@@ -44,7 +104,10 @@ def build_template():
     for template_filename in instances:
         for format_params in instances[template_filename]:
             with open(template_filename) as template_file:
-                template = yaml.load(template_file.read().format(**format_params))
+                userdata = get_userdata(**format_params)
+                template = yaml.load(template_file.read().format(
+                    **format_params,
+                    userdata=userdata))
                 for key, value in template.items():
                     resources[key] = value
 
@@ -56,7 +119,8 @@ def build_template():
     }
 
     # now create the stack using our template
-    return yaml.dump(vpc_template, default_flow_style=False)
+    data = yaml.dump(vpc_template, default_flow_style=False)
+    s3.upload(data, 'kubernetes-on-aws.yaml')
 
 
 def getmyip():
@@ -79,10 +143,10 @@ def apply_template(cloudformation, stackname, create_stack=True):
         cf_func = cloudformation.update_stack
         cf_waiter = 'stack_update_complete'
 
-    vpc_yaml = build_template()
+    build_template()
     stack = cf_func(
         StackName=stackname,
-        TemplateBody=vpc_yaml,
+        TemplateURL='https://s3-us-west-2.amazonaws.com/kubernetes-on-aws/kubernetes-on-aws.yaml',
         Parameters=[
             {'ParameterKey': 'InstanceKeyPair', 'ParameterValue': 'paul.sevcik'},
             {'ParameterKey': 'MyIP', 'ParameterValue': getmyip()},
@@ -113,16 +177,42 @@ def delete(cloudformation, stackname):
 
     waiter = cloudformation.get_waiter('stack_delete_complete')
     waiter.wait(StackName=stackname)
+
+    s3.delete_bucket()
+
     print('stack deletion complete')
+
+
+def names(cloudformation, stackname):
+    """
+        print out the instances public dns entries
+    """
+    stack_resources = cloudformation.describe_stack_resources(StackName=stackname)['StackResources']
+    instance_ids = [
+        resource['PhysicalResourceId']
+        for resource in stack_resources
+        if resource['ResourceType'] == 'AWS::EC2::Instance'
+    ]
+    ec2 = boto3.client('ec2')
+    reservations = ec2.describe_instances(InstanceIds=instance_ids)['Reservations']
+    instances = reduce(
+        lambda x, y: x+y,
+        [reservation['Instances'] for reservation in reservations]
+    )
+
+    for instance in instances:
+        name = [tag['Value'] for tag in instance['Tags'] if tag['Key'] == 'aws:cloudformation:logical-id'][0]
+        print('{} {}'.format(name, instance['PublicDnsName']))
 
 
 if __name__ == '__main__':
 
+    commands = ['create', 'delete', 'update', 'names']
     parser = argparse.ArgumentParser()
-    parser.add_argument('cmd', help='command to run, either create or delete')
+    parser.add_argument('cmd', help='command to run, one of %s' % ' '.join(commands))
     args = parser.parse_args()
 
-    if args.cmd not in ['create', 'delete', 'update']:
+    if args.cmd not in commands:
         import sys
         parser.print_help()
         sys.exit(1)

@@ -17,3 +17,4 @@
         KeyName:
             Ref: InstanceKeyPair
         SourceDestCheck: true
+        UserData: {userdata}

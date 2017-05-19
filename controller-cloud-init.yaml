@@ -1,0 +1,44 @@
+#cloud-config
+
+runcmd:
+  # install goss
+  - mkdir -p /home/ubuntu/goss/bin
+  - curl -L https://github.com/aelsabbahy/goss/releases/download/v0.3.2/goss-linux-amd64 -o /home/ubuntu/goss/bin/goss
+  - chmod +rx /home/ubuntu/goss/bin/goss
+
+write_files:
+  # configure goss
+  - path: /home/ubuntu/goss/goss.yaml
+    content: |
+        gossfile:
+            /home/ubuntu/goss/goss.d/*.yaml: {{}}
+  - path: /home/ubuntu/goss/goss.d/ping.yaml
+    content: |
+        command:
+            ping -c 3 10.240.0.10:
+                exit-status: 0
+            ping -c 3 10.240.0.11:
+                exit-status: 0
+            ping -c 3 10.240.0.12:
+                exit-status: 0
+            ping -c 3 10.240.0.20:
+                exit-status: 0
+            ping -c 3 10.240.0.21:
+                exit-status: 0
+            ping -c 3 10.240.0.22:
+                exit-status: 0
+
+
+  # install certs
+  - path: /home/ubuntu/certs/ca.pem
+    encoding: b64
+    content: {ca_pem}
+  - path: /home/ubuntu/certs/ca.pem
+    encoding: b64
+    content: {ca_key_pem}
+  - path: /home/ubuntu/certs/kubernetes.pem
+    encoding: b64
+    content: {kube_proxy_pem}
+  - path: /home/ubuntu/certs/kubernetes-key.pem
+    encoding: b64
+    content: {kube_proxy_key_pem}
