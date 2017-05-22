@@ -1,0 +1,32 @@
+{
+  "variables": {
+    "kube_node_type": ""
+  },
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "region": "us-west-2",
+      "source_ami": "ami-efd0428f",
+      "instance_type": "t2.micro",
+      "ssh_username": "ubuntu",
+      "ssh_keypair_name": "paul.sevcik",
+      "ssh_private_key_file": "/Users/sevcik/.ssh/id_rsa",
+      "ami_name": "kube-{{user `kube_node_type`}} {{isotime | clean_ami_name}}"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "salt-masterless",
+      "bootstrap_args": "-i {{user `kube_node_type`}}",
+      "local_pillar_roots": "./pillar",
+      "local_state_tree": "./salt",
+      "log_level": "info"
+    }
+  ],
+  "post-processors": [
+    {
+      "type": "manifest",
+      "output": "{{user `kube_node_type`}}.ami"
+    }
+  ]
+}

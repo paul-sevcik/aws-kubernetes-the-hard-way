@@ -1,0 +1,4 @@
+base:
+    '*':
+      - certs
+      - goss

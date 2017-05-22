@@ -1,7 +1,7 @@
 {name}:
     Type: AWS::EC2::Instance
     Properties:
-        ImageId: ami-efd0428f
+        ImageId: {ami_id}
         InstanceType:
             Ref: InstanceType
         NetworkInterfaces:
@@ -16,5 +16,4 @@
         AvailabilityZone: us-west-2a
         KeyName:
             Ref: InstanceKeyPair
-        SourceDestCheck: true
-        UserData: {userdata}
+        SourceDestCheck: {source_dest_check}

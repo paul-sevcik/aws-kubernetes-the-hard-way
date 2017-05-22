@@ -1,0 +1,2 @@
+gossfile:
+    /usr/local/share/goss.d/*.yaml: {}

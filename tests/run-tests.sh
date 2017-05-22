@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SSH='ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -q'
-CMD='sudo /home/ubuntu/goss/bin/goss -g /home/ubuntu/goss/goss.yaml validate'
+CMD='sudo /usr/local/bin/goss -g /usr/local/etc/goss.yaml validate'
 
 # Using a single loop caused conflict between the "| while read" and the ssh
 # command (the while loop would exececute once).  Not sure why that was a

@@ -41,9 +41,11 @@ def delete_bucket():
 def upload(content, filename):
     make_bucket()
 
-    with NamedTemporaryFile(mode='w') as file:
-        file.write(content)
-        bucket.upload_file(file.name, filename)
+    # with NamedTemporaryFile(mode='w') as file:
+    #     file.write(content)
+    #     bucket.upload_file(file.name, filename)
+
+    bucket.put_object(Body=content, Key=filename)
 
     #TODO: verify upload
 

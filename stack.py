@@ -3,13 +3,14 @@ Use Cloudformation to create all VPC elements, including InternetGateway,
 RouteTable, and Subnet.
 """
 import argparse
-from functools import reduce
 import base64
+from functools import reduce
+import logging
 
 import boto3
 import yaml
 
-import s3
+from ami import get_ami
 
 CONTROLLER_INSTANCES = 3
 WORKER_INSTANCES = 3
@@ -42,16 +43,6 @@ def get_cert(certfile):
     return data
 
 
-def get_userdata(**format_params):
-    """
-    Get user-data, format according to format_args, then encode it as base 64.
-    """
-    with open(format_params['userdata_template']) as f:
-        unencoded = f.read().format(**format_params)
-        data = encode_base64(unencoded)
-    return data
-
-
 def build_template():
 
     # break the template into separate files to make it easier to understand
@@ -64,35 +55,26 @@ def build_template():
         'resources/elb.yaml',
     ]
 
-    certs = {
-        'ca_pem': get_cert('ca/ca.pem'),
-        'ca_key_pem': get_cert('ca/ca-key.pem'),
-        'kube_proxy_pem': get_cert('ca/kube-proxy.pem'),
-        'kube_proxy_key_pem': get_cert('ca/kube-proxy-key.pem'),
-        'kubernetes_pem': get_cert('ca/kubernetes.pem'),
-        'kubernetes_key_pem': get_cert('ca/kubernetes-key.pem'),
-    }
+    instances = []
+    instances.extend([
+        {
+            'name': 'controller{0}'.format(num),
+            'ami_id': get_ami('controller'),
+            'privateip': '10.240.0.{0}'.format(10 + num),
+            'source_dest_check': False,
+        }
+        for num in range(CONTROLLER_INSTANCES)
+        ])
 
-    instances = {
-        'resources/controller.yaml': [
-            {
-                'name': 'controller{0}'.format(num),
-                'privateip': '10.240.0.{0}'.format(10 + num),
-                'userdata_template': 'controller-cloud-init.yaml',
-                **certs,
-            }
-            for num in range(CONTROLLER_INSTANCES)
-        ],
-        'resources/worker.yaml': [
-            {
-                'name': 'worker{0}'.format(num),
-                'privateip': '10.240.0.{0}'.format(20 + num),
-                'userdata_template': 'worker-cloud-init.yaml',
-                **certs,
-            }
-            for num in range(WORKER_INSTANCES)
-        ],
-    }
+    instances.extend([
+        {
+            'name': 'worker{0}'.format(num),
+            'ami_id': get_ami('worker'),
+            'privateip': '10.240.0.{0}'.format(20 + num),
+            'source_dest_check': True,
+        }
+        for num in range(WORKER_INSTANCES)
+        ])
 
     # combine files into final template
     resources = {}
@@ -101,15 +83,12 @@ def build_template():
             template = yaml.load(template_file)
             for key, value in template.items():
                 resources[key] = value
-    for template_filename in instances:
-        for format_params in instances[template_filename]:
-            with open(template_filename) as template_file:
-                userdata = get_userdata(**format_params)
-                template = yaml.load(template_file.read().format(
-                    **format_params,
-                    userdata=userdata))
-                for key, value in template.items():
-                    resources[key] = value
+    for format_params in instances:
+        with open('resources/instance.yaml') as template_file:
+            template = yaml.load(template_file.read().format(**format_params))
+            for key, value in template.items():
+                resources[key] = value
+    assert len(resources) > 0
 
     parameters = yaml.load(open('parameters.yaml'))
     vpc_template = {
@@ -120,7 +99,9 @@ def build_template():
 
     # now create the stack using our template
     data = yaml.dump(vpc_template, default_flow_style=False)
-    s3.upload(data, 'kubernetes-on-aws.yaml')
+    log.debug('length of template data = {}'.format(len(data)))
+
+    return data
 
 
 def getmyip():
@@ -143,10 +124,11 @@ def apply_template(cloudformation, stackname, create_stack=True):
         cf_func = cloudformation.update_stack
         cf_waiter = 'stack_update_complete'
 
-    build_template()
+    template = build_template()
+    log.debug('{} the stack'.format('create' if create_stack else 'update'))
     stack = cf_func(
         StackName=stackname,
-        TemplateURL='https://s3-us-west-2.amazonaws.com/kubernetes-on-aws/kubernetes-on-aws.yaml',
+        TemplateBody=template,
         Parameters=[
             {'ParameterKey': 'InstanceKeyPair', 'ParameterValue': 'paul.sevcik'},
             {'ParameterKey': 'MyIP', 'ParameterValue': getmyip()},
@@ -154,9 +136,12 @@ def apply_template(cloudformation, stackname, create_stack=True):
     )
 
     # wait for all AWS objects to get applied
+    log.debug('wait for {} to finish'.format('create' if create_stack else 'update'))
     stackid = stack['StackId']
     waiter = cloudformation.get_waiter(cf_waiter)
     waiter.wait(StackName=stackid)
+
+    log.debug('{} is done'.format('create' if create_stack else 'update'))
 
 
 def create(cloudformation, stackname):
@@ -177,8 +162,6 @@ def delete(cloudformation, stackname):
 
     waiter = cloudformation.get_waiter('stack_delete_complete')
     waiter.wait(StackName=stackname)
-
-    s3.delete_bucket()
 
     print('stack deletion complete')
 
@@ -206,11 +189,18 @@ def names(cloudformation, stackname):
 
 
 if __name__ == '__main__':
+    log = logging.getLogger('kubernetes-on-aws')
+    log.addHandler(logging.StreamHandler())
+    log.setLevel(logging.WARNING)
 
     commands = ['create', 'delete', 'update', 'names']
     parser = argparse.ArgumentParser()
     parser.add_argument('cmd', help='command to run, one of %s' % ' '.join(commands))
+    parser.add_argument('-v', '--verbose', action='store_true', help='verbose logging')
     args = parser.parse_args()
+
+    if args.verbose:
+        log.setLevel(logging.DEBUG)
 
     if args.cmd not in commands:
         import sys
