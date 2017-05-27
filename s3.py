@@ -1,6 +1,5 @@
 
 from datetime import datetime
-from tempfile import NamedTemporaryFile
 
 import boto3
 import botocore.exceptions
@@ -41,13 +40,10 @@ def delete_bucket():
 def upload(content, filename):
     make_bucket()
 
-    # with NamedTemporaryFile(mode='w') as file:
-    #     file.write(content)
-    #     bucket.upload_file(file.name, filename)
-
     bucket.put_object(Body=content, Key=filename)
 
-    #TODO: verify upload
+    # TODO: verify upload
+
 
 if __name__ == '__main__':
     make_bucket()

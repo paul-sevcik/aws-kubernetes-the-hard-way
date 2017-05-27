@@ -1,26 +1,17 @@
 #!/bin/bash
+set -x
 
-SSH='ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -q'
-CMD='sudo /usr/local/bin/goss -g /usr/local/etc/goss.yaml validate'
+fail() {
+    exit 1
+}
+trap "fail" INT TERM
 
-# Using a single loop caused conflict between the "| while read" and the ssh
-# command (the while loop would exececute once).  Not sure why that was a
-# problem, but  using a second loop for the ssh fixes it.
-names=()
-dnsnames=()
-while read line; do
-    names+=($(echo ${line} | awk '{print $1}'))
-    dnsnames+=($(echo ${line} | awk '{print $2}'))
-done < <(python stack.py names)
-
-for index in "${!names[@]}"
+result=0
+for instance in $(python stack.py instances)
 do
-    name=${names[${index}]}
-    dnsname=${dnsnames[${index}]}
-
-    if ${SSH} ubuntu@${dnsname} ${CMD}; then
-        echo "${name}: testing complete"
-    else
-        echo "${name}: testing failed"
+    python stack.py ssh ${instance} "sudo /usr/local/bin/goss -g /usr/local/etc/goss.yaml validate"
+    if [[ $? != 0 ]]; then
+        result=1
     fi
 done
+exit $result
