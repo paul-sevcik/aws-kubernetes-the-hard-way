@@ -43,7 +43,7 @@ pipeline {
             steps {
                 sh '''
                     . kube-virtualenv/bin/activate
-                    bash tests/run-tests.sh
+                    python run-tests.py
                 '''
             }
         }
