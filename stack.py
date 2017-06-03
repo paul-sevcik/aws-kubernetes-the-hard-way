@@ -3,9 +3,9 @@ Use Cloudformation to create all VPC elements, including InternetGateway,
 RouteTable, and Subnet.
 """
 import argparse
-import base64
 from functools import reduce
 import logging
+import os
 
 import boto3
 import yaml
@@ -15,32 +15,26 @@ from ami import get_ami
 CONTROLLER_INSTANCES = 3
 WORKER_INSTANCES = 3
 
+INSTANCES = []
+INSTANCES.extend([
+    {
+        'name': 'controller{0}'.format(num),
+        'ami_id': get_ami('controller'),
+        'privateip': '10.240.0.{0}'.format(10 + num),
+        'source_dest_check': False,
+    }
+    for num in range(CONTROLLER_INSTANCES)
+])
 
-def encode_base64(content):
-    """
-    Encode contents of a file as base64 string.
-    """
-
-    # convert to bytes
-    unencoded = bytes(content, 'utf-8')
-
-    # encode as base 64
-    encoded = base64.b64encode(unencoded)
-
-    # convert back to string
-    data = encoded.decode()
-
-    return data
-
-
-def get_cert(certfile):
-    """
-    Encode contents of cert file as base 64.
-    """
-    with open(certfile) as f:
-        unencoded = f.read()
-        data = encode_base64(unencoded)
-    return data
+INSTANCES.extend([
+    {
+        'name': 'worker{0}'.format(num),
+        'ami_id': get_ami('worker'),
+        'privateip': '10.240.0.{0}'.format(20 + num),
+        'source_dest_check': True,
+    }
+    for num in range(WORKER_INSTANCES)
+])
 
 
 def build_template():
@@ -55,27 +49,6 @@ def build_template():
         'resources/elb.yaml',
     ]
 
-    instances = []
-    instances.extend([
-        {
-            'name': 'controller{0}'.format(num),
-            'ami_id': get_ami('controller'),
-            'privateip': '10.240.0.{0}'.format(10 + num),
-            'source_dest_check': False,
-        }
-        for num in range(CONTROLLER_INSTANCES)
-        ])
-
-    instances.extend([
-        {
-            'name': 'worker{0}'.format(num),
-            'ami_id': get_ami('worker'),
-            'privateip': '10.240.0.{0}'.format(20 + num),
-            'source_dest_check': True,
-        }
-        for num in range(WORKER_INSTANCES)
-        ])
-
     # combine files into final template
     resources = {}
     for template_filename in resource_templates:
@@ -83,7 +56,8 @@ def build_template():
             template = yaml.load(template_file)
             for key, value in template.items():
                 resources[key] = value
-    for format_params in instances:
+    for format_params in INSTANCES:
+        assert format_params['ami_id']
         with open('resources/instance.yaml') as template_file:
             template = yaml.load(template_file.read().format(**format_params))
             for key, value in template.items():
@@ -130,7 +104,7 @@ def apply_template(cloudformation, stackname, create_stack=True):
         StackName=stackname,
         TemplateBody=template,
         Parameters=[
-            {'ParameterKey': 'InstanceKeyPair', 'ParameterValue': 'paul.sevcik'},
+            {'ParameterKey': 'InstanceKeyPair', 'ParameterValue': 'kubernetes-on-aws'},
             {'ParameterKey': 'MyIP', 'ParameterValue': getmyip()},
         ]
     )
@@ -157,18 +131,18 @@ def update(cloudformation, stackname):
 
 
 def delete(cloudformation, stackname):
-    print('deleting the stack')
+    log.debug('deleting the stack')
     cloudformation.delete_stack(StackName=stackname)
 
     waiter = cloudformation.get_waiter('stack_delete_complete')
     waiter.wait(StackName=stackname)
 
-    print('stack deletion complete')
+    log.debug('stack deletion complete')
 
 
-def names(cloudformation, stackname):
+def ssh(cloudformation, stackname, instance_name, ssh_cmd):
     """
-        print out the instances public dns entries
+        ssh to an ec2 instance
     """
     stack_resources = cloudformation.describe_stack_resources(StackName=stackname)['StackResources']
     instance_ids = [
@@ -178,14 +152,27 @@ def names(cloudformation, stackname):
     ]
     ec2 = boto3.client('ec2')
     reservations = ec2.describe_instances(InstanceIds=instance_ids)['Reservations']
-    instances = reduce(
+    ec2_instances = reduce(
         lambda x, y: x+y,
         [reservation['Instances'] for reservation in reservations]
     )
 
-    for instance in instances:
-        name = [tag['Value'] for tag in instance['Tags'] if tag['Key'] == 'aws:cloudformation:logical-id'][0]
-        print('{} {}'.format(name, instance['PublicDnsName']))
+    dnsname = None
+    for instance in ec2_instances:
+        short_name = [tag['Value'] for tag in instance['Tags'] if tag['Key'] == 'aws:cloudformation:logical-id'][0]
+        if short_name == instance_name:
+            dnsname = instance['PublicDnsName']
+            break
+    if not dnsname:
+        raise RuntimeError('could not find instance for ssh')
+
+    cmd = 'ssh -i {}/.ssh/kubernetes-on-aws'.format(os.environ['HOME']).split()
+    cmd.extend('-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'.split())
+    cmd.extend('ubuntu@{}'.format(dnsname).split())
+    if ssh_cmd:
+        cmd.extend(ssh_cmd.split())
+    print(cmd)
+    os.execlp(cmd[0], *cmd)
 
 
 if __name__ == '__main__':
@@ -193,19 +180,38 @@ if __name__ == '__main__':
     log.addHandler(logging.StreamHandler())
     log.setLevel(logging.WARNING)
 
-    commands = ['create', 'delete', 'update', 'names']
     parser = argparse.ArgumentParser()
-    parser.add_argument('cmd', help='command to run, one of %s' % ' '.join(commands))
     parser.add_argument('-v', '--verbose', action='store_true', help='verbose logging')
+
+    subparsers = parser.add_subparsers(dest='command')
+
+    subparsers.add_parser('create', help='create a new stack')
+    subparsers.add_parser('delete', help='delete the stack')
+    subparsers.add_parser('update', help='update the stack')
+    subparsers.add_parser('instances', help='list the aws instances')
+
+    parser_ssh = subparsers.add_parser('ssh', help='ssh to instance')
+    parser_ssh.add_argument('instance', choices=sorted([instance['name'] for instance in INSTANCES]))
+    parser_ssh.add_argument('ssh_cmd', nargs='?')
+
     args = parser.parse_args()
 
     if args.verbose:
         log.setLevel(logging.DEBUG)
 
-    if args.cmd not in commands:
-        import sys
-        parser.print_help()
-        sys.exit(1)
+    client = boto3.client('cloudformation')
+    name = 'Kubernetes-in-AWS'
 
-    command_func = locals()[args.cmd]
-    command_func(boto3.client('cloudformation'), 'Kubernetes-in-AWS')
+    if args.command == 'create':
+        create(client, name)
+    elif args.command == 'update':
+        update(client, name)
+    elif args.command == 'delete':
+        delete(client, name)
+    elif args.command == 'instances':
+        for instance in sorted([instance['name'] for instance in INSTANCES]):
+            print(instance)
+    elif args.command == 'ssh':
+        ssh(client, name, args.instance, args.ssh_cmd)
+    else:
+        parser.print_help()

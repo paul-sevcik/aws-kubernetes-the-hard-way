@@ -38,16 +38,21 @@ def get_latest_ami(ami_name):
             most_recent_ami = image
             most_recent_creation = creation_date
 
-    if most_recent_ami == None:
+    if most_recent_ami is None:
         raise LookupError("no AMIs matching 'kube-{}*'".format(ami_name))
 
     return most_recent_ami
 
+
 @functools.lru_cache(maxsize=32)
 def get_ami(ami_name):
     import json
-    with open('ami/{}.ami'.format(ami_name)) as manifest_file:
-        manifest = json.load(manifest_file)
+
+    try:
+        with open('ami/{}.ami'.format(ami_name)) as manifest_file:
+            manifest = json.load(manifest_file)
+    except FileNotFoundError:
+        return None
 
     amis = [build['artifact_id'].split(':') for build in manifest['builds']]
     assert len(amis) == 1 and amis[0][0] == 'us-west-2', amis

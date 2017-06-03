@@ -14,7 +14,6 @@ cfssljson:
 
 ca.pem ca-key.pem: cfssl cfssljson
 	./cfssl gencert -initca ca-csr.json | ./cfssljson -bare ca
-	rm admin.csr
 
 admin.pem: ca.pem ca-key.pem
 	$(GENCERT) admin-csr.json | ./cfssljson -bare admin

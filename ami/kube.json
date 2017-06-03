@@ -1,6 +1,8 @@
 {
   "variables": {
-    "kube_node_type": ""
+    "kube_node_type": "",
+    "ssh_keypair_name": "kubernetes-on-aws",
+    "ssh_private_key_file": "{{env `HOME`}}/.ssh/kubernetes-on-aws"
   },
   "builders": [
     {
@@ -9,8 +11,8 @@
       "source_ami": "ami-efd0428f",
       "instance_type": "t2.micro",
       "ssh_username": "ubuntu",
-      "ssh_keypair_name": "paul.sevcik",
-      "ssh_private_key_file": "/Users/sevcik/.ssh/id_rsa",
+      "ssh_keypair_name": "{{user `ssh_keypair_name`}}",
+      "ssh_private_key_file": "{{user `ssh_private_key_file`}}",
       "ami_name": "kube-{{user `kube_node_type`}} {{isotime | clean_ami_name}}"
     }
   ],
