@@ -140,6 +140,10 @@ def delete(cloudformation, stackname):
     log.debug('stack deletion complete')
 
 
+def instances():
+    return sorted([instance['name'] for instance in INSTANCES])
+
+
 def ssh(cloudformation, stackname, instance_name, ssh_cmd):
     """
         ssh to an ec2 instance
@@ -171,7 +175,6 @@ def ssh(cloudformation, stackname, instance_name, ssh_cmd):
     cmd.extend('ubuntu@{}'.format(dnsname).split())
     if ssh_cmd:
         cmd.extend(ssh_cmd.split())
-    print(cmd)
     os.execlp(cmd[0], *cmd)
 
 
@@ -209,7 +212,7 @@ if __name__ == '__main__':
     elif args.command == 'delete':
         delete(client, name)
     elif args.command == 'instances':
-        for instance in sorted([instance['name'] for instance in INSTANCES]):
+        for instance in instances():
             print(instance)
     elif args.command == 'ssh':
         ssh(client, name, args.instance, args.ssh_cmd)
